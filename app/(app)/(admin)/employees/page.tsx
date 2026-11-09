@@ -170,41 +170,127 @@ function EmpModal({ init, onClose, onSaved }: { init: Partial<Emp>; onClose: () 
   );
 }
 
+const IMPORT_FIELDS = [
+  { key: "emp_no", label: "사번", required: true },
+  { key: "name", label: "성명", required: true },
+  { key: "shift_type", label: "구분(교대/주전)" },
+  { key: "department", label: "부서" },
+  { key: "work_group", label: "근무조" },
+  { key: "position", label: "직책" },
+  { key: "is_supervisor", label: "관리감독자" },
+] as const;
+type Preview = { sheets: string[]; sheet: string; headerRow: number; headers: { col: number; text: string }[]; mapping: Record<string, number>; sample: string[][]; dataRows: number };
+const colName = (c: number) => { let s = ""; while (c > 0) { const m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; };
+
+/** 회사 보유 엑셀을 그대로 올려 등록: 미리보기 → 열 자동 매칭 확인 → 등록 */
 function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [file, setFile] = useState<File | null>(null);
+  const [pv, setPv] = useState<Preview | null>(null);
+  const [mapping, setMapping] = useState<Record<string, number>>({});
   const [deact, setDeact] = useState(false);
   const [busy, setBusy] = useState(false);
   const [res, setRes] = useState<{ inserted: number; updated: number; deactivated: number; supervisors: number | null; errors: string[]; errorCount: number } | null>(null);
   const [err, setErr] = useState("");
+
+  const preview = async (f: File, sheet?: string, headerRow?: number) => {
+    setBusy(true); setErr(""); setRes(null);
+    const fd = new FormData();
+    fd.set("file", f);
+    fd.set("mode", "preview");
+    if (sheet) fd.set("sheet", sheet);
+    if (headerRow) fd.set("headerRow", String(headerRow));
+    try {
+      const d = await api<Preview>("/api/employees/import", { form: fd });
+      setPv(d);
+      setMapping(d.mapping);
+    } catch (e) { setPv(null); setErr(e instanceof Error ? e.message : "파일 분석 실패"); }
+    finally { setBusy(false); }
+  };
+
   const submit = async () => {
-    if (!file) return;
+    if (!file || !pv) return;
+    if (!mapping.emp_no || !mapping.name) return setErr("'사번'과 '성명' 열을 지정하세요.");
     if (deact && !confirm("업로드 파일에 없는 기존 직원은 모두 '비활성' 처리됩니다. 계속할까요?")) return;
     setBusy(true); setErr(""); setRes(null);
     const fd = new FormData();
     fd.set("file", file);
+    fd.set("mode", "import");
+    fd.set("sheet", pv.sheet);
+    fd.set("headerRow", String(pv.headerRow));
+    fd.set("mapping", JSON.stringify(mapping));
     if (deact) fd.set("deactivateMissing", "1");
     try { setRes(await api("/api/employees/import", { form: fd })); onDone(); }
     catch (e) { setErr(e instanceof Error ? e.message : "실패"); }
     finally { setBusy(false); }
   };
+
+  const ready = !!pv && !!mapping.emp_no && !!mapping.name;
   return (
-    <Modal title="엑셀로 직원 일괄 등록" onClose={onClose}
-      footer={<><button className="btn" onClick={onClose}>닫기</button><button className="btn primary" disabled={!file || busy} onClick={submit}>{busy ? "업로드 중..." : "업로드"}</button></>}>
+    <Modal title="엑셀로 직원 일괄 등록" onClose={onClose} wide
+      footer={<><button className="btn" onClick={onClose}>닫기</button>
+        <button className="btn primary" disabled={!ready || busy || !!res} onClick={submit}>{busy ? "처리 중..." : pv ? `${pv.dataRows.toLocaleString()}행 등록하기` : "등록하기"}</button></>}>
       <div className="stack">
         <div className="alert info small">
-          헤더: <b>사번, 구분, 성명, 부서, 근무조, 직책, 관리감독자</b> (사번·성명 필수, 열 순서 무관, .xlsx)<br />
-          관리감독자 열에 <b>Y</b>를 넣으면 모든 교육에서 자동 출석 인정됩니다. (열이 없으면 기존 설정 유지)<br />
-          ※ 직원은 출석할 때 <b>사번·성명</b>을 입력하므로 사번이 반드시 있어야 합니다.<br />
-          이미 등록된 사번은 정보가 갱신됩니다.
+          <b>회사에서 관리하는 엑셀 파일을 그대로 올리세요.</b> 시트·제목 줄·열 순서가 달라도 자동으로 찾아 맞춥니다.<br />
+          필수: <b>사번, 성명</b> (직원이 출석할 때 입력) · 선택: 구분, 부서, 근무조, 직책, 관리감독자(Y 표시)<br />
+          파일 형식: .xlsx, .csv (예전 .xls는 엑셀에서 .xlsx로 다시 저장해 주세요)
         </div>
-        <input type="file" accept=".xlsx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-        <label className="row small"><input type="checkbox" checked={deact} onChange={(e) => setDeact(e.target.checked)} /> 파일에 없는 기존 직원은 비활성(퇴사) 처리 — 전체 명단 갱신 시 사용</label>
+        <input type="file" accept=".xlsx,.xlsm,.csv,.xls" onChange={(e) => { const f = e.target.files?.[0] ?? null; setFile(f); setPv(null); if (f) preview(f); }} />
+        {busy && !pv && <div className="muted small">파일 분석 중...</div>}
+
+        {pv && (
+          <>
+            <div className="form-grid">
+              <label className="field">시트
+                <select value={pv.sheet} onChange={(e) => file && preview(file, e.target.value)}>
+                  {pv.sheets.map((n) => <option key={n}>{n}</option>)}
+                </select>
+              </label>
+              <label className="field">제목(헤더) 행 번호
+                <input type="number" min={1} value={pv.headerRow} onChange={(e) => file && Number(e.target.value) > 0 && preview(file, pv.sheet, Number(e.target.value))} />
+              </label>
+            </div>
+
+            <div>
+              <div className="small" style={{ fontWeight: 700, marginBottom: 6 }}>열 지정 <span className="muted">(자동으로 찾은 결과 · 틀리면 바꿔주세요)</span></div>
+              <div className="form-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}>
+                {IMPORT_FIELDS.map((f) => (
+                  <label key={f.key} className="field">
+                    <span>{f.label}{"required" in f && f.required && <span style={{ color: "var(--bad)" }}> *</span>}</span>
+                    <select value={mapping[f.key] ?? 0} onChange={(e) => setMapping({ ...mapping, [f.key]: Number(e.target.value) })}
+                      style={"required" in f && f.required && !mapping[f.key] ? { borderColor: "var(--bad)" } : undefined}>
+                      <option value={0}>{"required" in f && f.required ? "— 선택하세요 —" : "(없음 · 기존값 유지)"}</option>
+                      {pv.headers.map((h) => <option key={h.col} value={h.col}>{colName(h.col)}열{h.text ? ` · ${h.text}` : ""}</option>)}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="small" style={{ fontWeight: 700, marginBottom: 6 }}>미리보기 <span className="muted">(위 지정대로 읽은 첫 5명 · 전체 {pv.dataRows.toLocaleString()}행)</span></div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr>{IMPORT_FIELDS.map((f) => <th key={f.key}>{f.label}</th>)}</tr></thead>
+                  <tbody>
+                    {pv.sample.map((row, i) => (
+                      <tr key={i}>{IMPORT_FIELDS.map((f) => <td key={f.key} className="small">{mapping[f.key] ? row[mapping[f.key] - 1] : <span className="muted">-</span>}</td>)}</tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {!ready && <div className="alert warn small" style={{ marginTop: 8 }}>사번과 성명 열을 지정해야 등록할 수 있습니다. 파일에 사번 열이 없다면 사번을 추가한 뒤 다시 올려주세요.</div>}
+            </div>
+
+            <label className="row small"><input type="checkbox" checked={deact} onChange={(e) => setDeact(e.target.checked)} /> 파일에 없는 기존 직원은 비활성(퇴사) 처리 — 전체 명단을 새로 올릴 때 사용</label>
+          </>
+        )}
         {err && <div className="alert err">{err}</div>}
         {res && (
           <div className="alert ok">
-            신규 <b>{res.inserted}</b>명 · 갱신 <b>{res.updated}</b>명{res.deactivated ? <> · 비활성 <b>{res.deactivated}</b>명</> : null}
+            ✓ 등록 완료 — 신규 <b>{res.inserted}</b>명 · 갱신 <b>{res.updated}</b>명{res.deactivated ? <> · 비활성 <b>{res.deactivated}</b>명</> : null}
             {res.supervisors !== null && <> · 관리감독자 <b>{res.supervisors}</b>명</>}
-            {res.errorCount > 0 && <div className="small" style={{ color: "var(--bad)", marginTop: 6 }}>오류/경고 {res.errorCount}건<br />{res.errors.slice(0, 10).map((e, i) => <div key={i}>{e}</div>)}</div>}
+            {res.errorCount > 0 && <div className="small" style={{ color: "var(--bad)", marginTop: 6 }}>건너뛴 행 {res.errorCount}건<br />{res.errors.slice(0, 10).map((e, i) => <div key={i}>{e}</div>)}</div>}
           </div>
         )}
       </div>
