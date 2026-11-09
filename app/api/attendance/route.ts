@@ -3,9 +3,9 @@ import { audit, body, HttpError, int, ok, route } from "@/lib/api";
 import { isTarget } from "@/lib/common";
 import { getTraining } from "@/lib/trainings";
 
-/** 참석 처리 — (training_id, employee_id) UNIQUE 로 중복 방지 */
+/** 담당자 수기 참석 처리 — (training_id, employee_id) UNIQUE 로 중복 방지 */
 export const POST = route("any", async ({ req, user }) => {
-  const b = await body<{ trainingId?: unknown; roundId?: unknown; token?: string; employeeId?: unknown }>(req);
+  const b = await body<{ trainingId?: unknown; roundId?: unknown; employeeId?: unknown }>(req);
   const trainingId = int(b.trainingId);
   const roundId = int(b.roundId);
   const sql = await db();
@@ -15,14 +15,12 @@ export const POST = route("any", async ({ req, user }) => {
   if (!round) throw new HttpError(404, "차수를 찾을 수 없습니다.");
   if (round.status !== "open") throw new HttpError(400, `${round.round_no}차는 현재 출석 접수 중이 아닙니다.`);
 
-  const [emp] = b.token
-    ? await sql`SELECT * FROM employees WHERE qr_token = ${String(b.token)}`
-    : await sql`SELECT * FROM employees WHERE id = ${int(b.employeeId)}`;
+  const [emp] = await sql`SELECT * FROM employees WHERE id = ${int(b.employeeId)}`;
   if (!emp) throw new HttpError(404, "직원 정보를 찾을 수 없습니다.");
   if (!emp.active) throw new HttpError(400, `${emp.name}(${emp.emp_no}) 님은 비활성(퇴사/휴직) 상태입니다.`);
   if (!isTarget(emp, training.target)) throw new HttpError(400, `${emp.name}(${emp.emp_no}) 님은 이 교육의 대상자가 아닙니다.`);
 
-  const method = b.token ? "qr" : "manual";
+  const method = "manual";
   const [ins] = await sql`
     INSERT INTO attendance (training_id, round_id, employee_id, checked_by, method)
     VALUES (${trainingId}, ${roundId}, ${emp.id}, ${user.id}, ${method})

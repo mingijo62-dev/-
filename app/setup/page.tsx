@@ -32,7 +32,7 @@ export default function SetupPage() {
   return (
     <div className="auth-wrap">
       <form className="auth-card stack" onSubmit={submit}>
-        <h1><span className="brand-mark">✓</span> 초기 설정</h1>
+        <h1>안전교육 출석관리 · 초기 설정</h1>
         {!state && !err && <p className="muted">확인 중...</p>}
         {state && !state.needsSetup && (
           <div className="alert info">이미 설정이 완료되었습니다. <a href="/login"><b>로그인 →</b></a></div>

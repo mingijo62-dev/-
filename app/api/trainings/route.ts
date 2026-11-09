@@ -14,10 +14,14 @@ export const GET = route("any", async ({ user }) => {
                   (SELECT count(*)::int FROM attendance a WHERE a.round_id = r.id) AS attended
                 FROM rounds r WHERE r.training_id IN ${sql(ids)} ORDER BY r.round_no`
     : [];
+  const files = ids.length
+    ? await sql`SELECT id, training_id, filename, size, created_at FROM training_files WHERE training_id IN ${sql(ids)} ORDER BY id`
+    : [];
   const result = [];
   for (const t of trainings) {
     const target = normalizeTarget(t.target);
-    const item: Record<string, unknown> = { ...t, target, rounds: rounds.filter((r) => r.training_id === t.id) };
+    const item: Record<string, unknown> = { ...t, target, rounds: rounds.filter((r) => r.training_id === t.id),
+      files: files.filter((f) => f.training_id === t.id) };
     if (!staff) {
       const [c] = await sql`SELECT count(*)::int AS target_count,
                               count(a.id)::int AS attended_count

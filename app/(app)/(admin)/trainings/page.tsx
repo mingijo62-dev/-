@@ -5,7 +5,61 @@ import { api, DIMS, pct } from "@/lib/client";
 import { Bar, Modal, RoundBadge, toast } from "@/components/ui";
 import type { Round } from "@/components/TrainingPicker";
 
-type T = { id: number; title: string; description: string; status: string; target: Record<string, string[]>; rounds: Round[]; target_count: number; attended_count: number; created_at: string };
+type F = { id: number; filename: string; size: number; created_at: string };
+type T = { id: number; title: string; description: string; status: string; target: Record<string, string[]>; rounds: Round[]; files: F[]; target_count: number; attended_count: number; created_at: string };
+const ACCEPT = ".pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,.hwp,.hwpx,.txt,.png,.jpg,.jpeg,.gif,.zip";
+const mb = (n: number) => (n / 1024 / 1024 < 0.1 ? `${Math.max(1, Math.round(n / 1024))}KB` : `${(n / 1024 / 1024).toFixed(1)}MB`);
+
+async function uploadFiles(tid: number, files: File[]) {
+  if (!files.length) return;
+  const big = files.find((f) => f.size > 4 * 1024 * 1024);
+  if (big) throw new Error(`${big.name}: 파일은 4MB 이하만 업로드할 수 있습니다.`);
+  // 요청 크기 제한 때문에 파일별로 나눠 전송
+  for (const f of files) {
+    const fd = new FormData();
+    fd.append("files", f);
+    await api(`/api/trainings/${tid}/files`, { form: fd });
+  }
+}
+
+function FilesBox({ t, onChange }: { t: T; onChange: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const up = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = [...(e.target.files ?? [])];
+    e.target.value = "";
+    if (!files.length) return;
+    setBusy(true);
+    try { await uploadFiles(t.id, files); toast(`${files.length}개 파일 업로드 완료`); onChange(); }
+    catch (ex) { alert(ex instanceof Error ? ex.message : "업로드 실패"); }
+    finally { setBusy(false); }
+  };
+  const del = async (f: F) => {
+    if (!confirm(`'${f.filename}' 파일을 삭제할까요?`)) return;
+    await api(`/api/files/${f.id}`, { method: "DELETE" });
+    onChange();
+  };
+  return (
+    <div style={{ marginTop: 14, padding: 12, background: "#f8fafc", borderRadius: 10 }}>
+      <div className="row" style={{ marginBottom: 4 }}>
+        <b className="small">📎 교육 자료 ({t.files.length})</b>
+        <span className="muted small">출석 완료한 직원 화면에 다운로드 링크로 표시됩니다</span>
+        <span className="spacer" />
+        <label className="btn sm" style={{ cursor: "pointer" }}>
+          {busy ? "업로드 중..." : "+ 파일 첨부"}
+          <input type="file" multiple accept={ACCEPT} onChange={up} disabled={busy} style={{ display: "none" }} />
+        </label>
+      </div>
+      {!t.files.length && <div className="muted small">첨부된 자료가 없습니다. (PDF·PPT·한글·워드·엑셀·이미지, 파일당 4MB 이하)</div>}
+      {t.files.map((f) => (
+        <div className="file-row" key={f.id}>
+          <a href={`/api/files/${f.id}`} target="_blank" rel="noreferrer" style={{ flex: 1, wordBreak: "break-all" }}>{f.filename}</a>
+          <span className="muted small">{mb(f.size)}</span>
+          <button className="btn sm danger" onClick={() => del(f)}>삭제</button>
+        </div>
+      ))}
+    </div>
+  );
+}
 type Meta = Record<string, string[]>;
 type RoundForm = { id?: number; edu_date: string; start_time: string; end_time: string; location: string; instructor: string; status: string };
 
@@ -46,7 +100,7 @@ export default function TrainingsPage() {
   return (
     <>
       <div className="page-head">
-        <div><h1>교육·차수 관리</h1><div className="muted small">교육(예: 2026 하반기 정기안전교육)을 만들고 차수(일자/시간/장소)별로 출석을 접수합니다. 한 교육 내에서 직원은 1회만 참석 처리됩니다.</div></div>
+        <div><h1>교육·차수 관리</h1><div className="muted small">교육(예: 2026 하반기 정기안전교육)을 만들고 차수(일자/시간/장소)별로 출석을 접수합니다. 직원은 <b>교육 당일 · 접수중</b>인 차수에만 이번 주 QR로 출석할 수 있으며, 한 교육에 1회만 참석 처리됩니다.</div></div>
         <button className="btn primary" onClick={() => setEdit({ title: "", description: "", target: {}, rounds: [] })}>+ 새 교육</button>
       </div>
 
@@ -105,6 +159,7 @@ export default function TrainingsPage() {
               </table>
             </div>
             <button className="btn sm" style={{ marginTop: 10 }} onClick={() => setRoundEdit({ tid: t.id, r: emptyRound() })}>+ 차수 추가</button>
+            <FilesBox t={t} onChange={load} />
           </div>
         );
       })}
@@ -121,6 +176,7 @@ function TrainingModal({ init, meta, onClose, onSaved }: { init: Partial<T>; met
   const [description, setDesc] = useState(init.description ?? "");
   const [target, setTarget] = useState<Record<string, string[]>>(init.target ?? {});
   const [rounds, setRounds] = useState<RoundForm[]>(isNew ? [emptyRound()] : []);
+  const [files, setFiles] = useState<File[]>([]);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -133,8 +189,11 @@ function TrainingModal({ init, meta, onClose, onSaved }: { init: Partial<T>; met
     setBusy(true);
     setErr("");
     try {
-      if (isNew) await api("/api/trainings", { body: { title, description, target, rounds } });
-      else await api(`/api/trainings/${init.id}`, { method: "PATCH", body: { title, description, target } });
+      if (isNew) {
+        const r = await api<{ id: number }>("/api/trainings", { body: { title, description, target, rounds } });
+        try { await uploadFiles(r.id, files); }
+        catch (ex) { alert(`교육은 저장되었지만 자료 업로드 중 오류가 발생했습니다.\n${ex instanceof Error ? ex.message : ""}`); }
+      } else await api(`/api/trainings/${init.id}`, { method: "PATCH", body: { title, description, target } });
       toast("저장되었습니다.");
       onSaved();
     } catch (e) {
@@ -181,6 +240,12 @@ function TrainingModal({ init, meta, onClose, onSaved }: { init: Partial<T>; met
             ))}
             <button type="button" className="btn sm" onClick={() => setRounds([...rounds, { ...(rounds[rounds.length - 1] ?? emptyRound()) }])}>+ 차수 추가</button>
           </div>
+        )}
+        {isNew && (
+          <label className="field">교육 자료 첨부 (선택 · 여러 개 가능 · 파일당 4MB 이하)
+            <input type="file" multiple accept={ACCEPT} onChange={(e) => setFiles([...(e.target.files ?? [])])} />
+            {files.length > 0 && <span className="small muted">{files.map((f) => `${f.name} (${mb(f.size)})`).join(", ")}</span>}
+          </label>
         )}
         {err && <div className="alert err">{err}</div>}
       </div>

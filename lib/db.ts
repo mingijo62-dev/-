@@ -93,6 +93,33 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_logs(created_at DESC);
+
+-- v2: 주간 공용 QR 자가출석
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS device_id TEXT;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS ip TEXT NOT NULL DEFAULT '';
+ALTER TABLE attendance DROP CONSTRAINT IF EXISTS attendance_method_check;
+CREATE INDEX IF NOT EXISTS idx_att_device ON attendance(training_id, device_id);
+CREATE INDEX IF NOT EXISTS idx_audit_ip ON audit_logs(ip, action, created_at DESC);
+
+-- v2: 교육 자료 파일
+CREATE TABLE IF NOT EXISTS training_files (
+  id          SERIAL PRIMARY KEY,
+  training_id INT NOT NULL REFERENCES trainings(id) ON DELETE CASCADE,
+  filename    TEXT NOT NULL,
+  mime        TEXT NOT NULL DEFAULT 'application/octet-stream',
+  size        INT  NOT NULL,
+  data        BYTEA NOT NULL,
+  uploaded_by INT REFERENCES admins(id) ON DELETE SET NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_files_training ON training_files(training_id);
+
+-- v2: 사이트 설정 (로고, 회사명, 주간 QR 버전)
+CREATE TABLE IF NOT EXISTS settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;
 
 /** 스키마를 보장한 뒤 SQL 클라이언트를 반환 (프로세스당 1회 마이그레이션) */

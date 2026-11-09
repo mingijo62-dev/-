@@ -1,10 +1,9 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import QRCode from "qrcode";
-import { api, DIMS, download, qrUrl } from "@/lib/client";
+import { api, DIMS, download } from "@/lib/client";
 import { Modal, Pager, toast } from "@/components/ui";
 
-type Emp = { id: number; emp_no: string; name: string; shift_type: string; department: string; work_group: string; position: string; qr_token: string; active: boolean };
+type Emp = { id: number; emp_no: string; name: string; shift_type: string; department: string; work_group: string; position: string; active: boolean };
 type Meta = Record<string, string[]>;
 const EMPTY = { emp_no: "", name: "", shift_type: "주전", department: "", work_group: "", position: "", active: true };
 
@@ -15,7 +14,6 @@ export default function EmployeesPage() {
   const [data, setData] = useState<{ rows: Emp[]; total: number; size: number } | null>(null);
   const [sel, setSel] = useState<Set<number>>(new Set());
   const [edit, setEdit] = useState<Partial<Emp> | null>(null);
-  const [qr, setQr] = useState<Emp | null>(null);
   const [importing, setImporting] = useState(false);
 
   const params = useCallback(() => {
@@ -49,17 +47,15 @@ export default function EmployeesPage() {
     toast("삭제되었습니다.");
     load();
   };
-  const printUrl = () => (sel.size ? `/employees/print?ids=${[...sel].join(",")}` : `/employees/print?${params()}`);
   const allChecked = !!data?.rows.length && data.rows.every((r) => sel.has(r.id));
 
   return (
     <>
       <div className="page-head">
-        <div><h1>직원·QR 관리</h1><div className="muted small">직원별 고유 QR코드는 개인정보가 포함되지 않은 무작위 코드로 자동 생성됩니다.</div></div>
+        <div><h1>직원 관리</h1><div className="muted small">출석 시 직원이 입력한 사번·이름을 이 명단과 대조합니다. 교육 대상자 집계 기준이 되므로 최신 명단을 유지하세요.</div></div>
         <div className="row">
           <button className="btn" onClick={() => download("/api/employees/template").catch((e) => alert(e.message))}>양식 다운로드</button>
           <button className="btn" onClick={() => setImporting(true)}>⬆ 엑셀 업로드</button>
-          <a className="btn" href={printUrl()} target="_blank" rel="noreferrer">🖨 QR {sel.size ? `선택(${sel.size}) ` : "일괄 "}출력</a>
           <button className="btn primary" onClick={() => setEdit({ ...EMPTY })}>+ 직원 등록</button>
         </div>
       </div>
@@ -110,7 +106,6 @@ export default function EmployeesPage() {
                   <td>{e.shift_type}</td><td>{e.department}</td><td>{e.work_group}</td><td>{e.position}</td>
                   <td>{e.active ? <span className="badge ok">재직</span> : <span className="badge">비활성</span>}</td>
                   <td className="right nowrap">
-                    <button className="btn sm" onClick={() => setQr(e)}>QR</button>{" "}
                     <button className="btn sm" onClick={() => setEdit(e)}>수정</button>{" "}
                     <button className="btn sm danger" onClick={() => del(e)}>삭제</button>
                   </td>
@@ -124,7 +119,6 @@ export default function EmployeesPage() {
       </div>
 
       {edit && <EmpModal init={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); loadMeta(); }} />}
-      {qr && <QrModal emp={qr} onClose={() => setQr(null)} onReissued={(e) => { setQr(e); load(); }} />}
       {importing && <ImportModal onClose={() => setImporting(false)} onDone={() => { load(); loadMeta(); }} />}
     </>
   );
@@ -165,30 +159,6 @@ function EmpModal({ init, onClose, onSaved }: { init: Partial<Emp>; onClose: () 
   );
 }
 
-function QrModal({ emp, onClose, onReissued }: { emp: Emp; onClose: () => void; onReissued: (e: Emp) => void }) {
-  const [src, setSrc] = useState("");
-  useEffect(() => { QRCode.toDataURL(qrUrl(emp.qr_token), { width: 480, margin: 2, errorCorrectionLevel: "M" }).then(setSrc); }, [emp.qr_token]);
-  const reissue = async () => {
-    if (!confirm("QR을 재발급하면 기존 QR코드는 즉시 사용할 수 없게 됩니다. 계속할까요?")) return;
-    onReissued(await api<Emp>(`/api/employees/${emp.id}/reissue`, { method: "POST" }));
-    toast("QR이 재발급되었습니다.");
-  };
-  return (
-    <Modal title="직원 QR코드" onClose={onClose}
-      footer={<>
-        <button className="btn danger" onClick={reissue}>QR 재발급(분실)</button>
-        <a className="btn primary" href={src} download={`QR_${emp.emp_no}_${emp.name}.png`}>PNG 저장</a>
-      </>}>
-      <div className="center">
-        {src && <img src={src} alt="QR" style={{ width: 260, height: 260 }} />}
-        <div style={{ fontSize: 20, fontWeight: 800 }}>{emp.name}</div>
-        <div className="muted">{emp.emp_no} · {emp.department} {emp.work_group}</div>
-        <p className="small muted">QR에는 무작위 식별코드만 담겨 있으며, 담당자 로그인 후에만 직원 정보가 표시됩니다.</p>
-      </div>
-    </Modal>
-  );
-}
-
 function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [file, setFile] = useState<File | null>(null);
   const [deact, setDeact] = useState(false);
@@ -212,7 +182,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
       <div className="stack">
         <div className="alert info small">
           헤더: <b>사번, 이름, 교대/주전, 부서, 근무조, 직책</b> (사번·이름 필수, .xlsx)<br />
-          이미 등록된 사번은 정보가 갱신되고 기존 QR코드는 유지됩니다.
+          이미 등록된 사번은 정보가 갱신됩니다.
         </div>
         <input type="file" accept=".xlsx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
         <label className="row small"><input type="checkbox" checked={deact} onChange={(e) => setDeact(e.target.checked)} /> 파일에 없는 기존 직원은 비활성(퇴사) 처리 — 전체 명단 갱신 시 사용</label>

@@ -75,7 +75,7 @@ export const GET = route(["admin"], async ({ req, user }) => {
         ...r,
         status: r.attended ? "참석" : "미참석",
         round: r.round_no ? `${r.round_no}차` : "",
-        method: r.method === "qr" ? "QR" : r.method === "manual" ? "수기" : "",
+        method: r.method === "self" ? "QR자가" : r.method === "qr" ? "QR" : r.method === "manual" ? "수기" : "",
       });
       if (!r.attended) row.getCell(7).font = { color: { argb: "FFC0392B" }, bold: true };
     }

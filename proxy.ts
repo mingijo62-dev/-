@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC = ["/login", "/setup"];
+const PUBLIC = ["/login", "/setup", "/a/"];
 
 /** 미로그인 사용자를 로그인 화면으로 (원래 주소는 next 로 보존). 세부 검증은 서버 레이아웃/API에서 수행 */
 export function proxy(req: NextRequest) {

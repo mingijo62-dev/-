@@ -225,7 +225,7 @@ export default function Dashboard() {
                   <td className="nowrap"><b>{r.name}</b></td>
                   <td>{r.shift_type}</td><td>{r.department}</td><td>{r.work_group}</td><td>{r.position}</td>
                   <td>{r.checked_at ? <span className="badge ok">{r.round_no}차 참석</span> : <span className="badge bad">미참석</span>}</td>
-                  <td className="small nowrap mono">{r.checked_at ? <>{fmtTime(r.checked_at)} <span className="muted">{r.method === "manual" ? "수기" : "QR"}{r.checked_by_name ? `·${r.checked_by_name}` : ""}</span></> : ""}</td>
+                  <td className="small nowrap mono">{r.checked_at ? <>{fmtTime(r.checked_at)} <span className="muted">{r.method === "manual" ? "수기" : r.method === "self" ? "QR자가" : "QR"}{r.checked_by_name ? `·${r.checked_by_name}` : ""}</span></> : ""}</td>
                   <td className="right">
                     {r.checked_at ? <button className="btn sm danger" onClick={() => cancel(r)}>취소</button>
                       : <button className="btn sm" onClick={() => manual(r)}>수기처리</button>}

@@ -3,21 +3,16 @@ import { HttpError, ok, route } from "@/lib/api";
 import { isTarget } from "@/lib/common";
 import { getTraining } from "@/lib/trainings";
 
-/** 스캔/검색 조회: token | q(사번·이름) + trainingId */
+/** 수기 출석용 검색: q(사번·이름) + trainingId */
 export const GET = route("any", async ({ req }) => {
   const u = new URL(req.url).searchParams;
   const trainingId = Number(u.get("trainingId"));
-  const token = (u.get("token") || "").trim();
   const q = (u.get("q") || "").trim();
   const sql = await db();
   const training = trainingId ? await getTraining(sql, trainingId) : null;
 
   let emps;
-  if (token) {
-    if (!/^[A-Za-z0-9_-]{10,64}$/.test(token)) throw new HttpError(400, "유효하지 않은 QR코드입니다.");
-    emps = await sql`SELECT * FROM employees WHERE qr_token = ${token}`;
-    if (!emps.length) throw new HttpError(404, "등록되지 않았거나 재발급으로 폐기된 QR코드입니다.");
-  } else if (q.length >= 2) {
+  if (q.length >= 2) {
     emps = await sql`SELECT * FROM employees WHERE emp_no = ${q} OR name = ${q} OR emp_no ILIKE ${q + "%"}
                      ORDER BY (emp_no = ${q}) DESC, name LIMIT 20`;
   } else {
@@ -39,7 +34,6 @@ export const GET = route("any", async ({ req }) => {
     work_group: e.work_group,
     position: e.position,
     active: e.active,
-    qr_token: token ? e.qr_token : undefined,
     is_target: training ? isTarget(e, training.target) : true,
     attendance: att.find((a) => a.employee_id === e.id) ?? null,
   }));

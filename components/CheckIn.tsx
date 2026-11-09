@@ -4,7 +4,7 @@ import { api, fmtTime } from "@/lib/client";
 
 export type ScanEmp = {
   id: number; emp_no: string; name: string; shift_type: string; department: string; work_group: string; position: string;
-  active: boolean; is_target: boolean; qr_token?: string;
+  active: boolean; is_target: boolean;
   attendance: null | { checked_at: string; round_no: number; method: string; checked_by_name: string | null };
 };
 
@@ -44,7 +44,7 @@ export function EmployeeCheckCard({
     setErr("");
     try {
       const r = await api<CheckResult>("/api/attendance", {
-        body: emp.qr_token ? { trainingId, roundId, token: emp.qr_token } : { trainingId, roundId, employeeId: emp.id },
+        body: { trainingId, roundId, employeeId: emp.id },
       });
       setResult(r);
       feedback(r.status === "ok" ? "ok" : "dup");

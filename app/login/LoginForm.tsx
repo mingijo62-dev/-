@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Logo from "@/components/Logo";
 
 export default function LoginForm({ next }: { next: string }) {
   const [username, setU] = useState("");
@@ -25,7 +26,7 @@ export default function LoginForm({ next }: { next: string }) {
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "로그인 실패");
-      location.href = next || (d.role === "admin" ? "/dashboard" : "/scan");
+      location.href = next || (d.role === "admin" ? "/dashboard" : "/qr");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "로그인 실패");
       setBusy(false);
@@ -36,7 +37,8 @@ export default function LoginForm({ next }: { next: string }) {
     <div className="auth-wrap">
       <form className="auth-card stack" onSubmit={submit}>
         <div>
-          <h1><span className="brand-mark">✓</span> 안전교육 출석관리</h1>
+          <Logo dark />
+          <h1 style={{ marginTop: 12 }}>안전교육 출석관리</h1>
           <p className="muted small" style={{ margin: 0 }}>관리자·출석 담당자 전용 시스템입니다.</p>
         </div>
         {needsSetup && (
@@ -44,7 +46,6 @@ export default function LoginForm({ next }: { next: string }) {
             초기 설정이 필요합니다. <Link href="/setup"><b>최초 관리자 계정 만들기 →</b></Link>
           </div>
         )}
-        {next.startsWith("/s/") && <div className="alert warn small">QR 출석 처리를 위해 담당자 로그인이 필요합니다.</div>}
         <label className="field">아이디
           <input value={username} onChange={(e) => setU(e.target.value)} autoComplete="username" autoCapitalize="off" required />
         </label>

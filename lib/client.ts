@@ -40,19 +40,6 @@ export const DIMS = [
   { key: "position", label: "직책" },
 ] as const;
 
-export function qrUrl(token: string) {
-  return `${location.origin}/s/${token}`;
-}
-
-/** QR 문자열에서 토큰 추출 (URL 또는 토큰 자체 모두 허용) */
-export function extractToken(text: string) {
-  const t = text.trim();
-  const m = t.match(/\/s\/([A-Za-z0-9_-]{10,64})(?:[?#].*)?$/);
-  if (m) return m[1];
-  if (/^[A-Za-z0-9_-]{10,64}$/.test(t)) return t;
-  return null;
-}
-
 export async function download(url: string) {
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {

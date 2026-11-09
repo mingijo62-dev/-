@@ -1,17 +1,23 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { createContext, useContext } from "react";
 import { Toaster } from "./ui";
+import Logo from "./Logo";
 
 type U = { name: string; role: "admin" | "staff"; username: string };
+const UserCtx = createContext<U | null>(null);
+export const useUser = () => useContext(UserCtx);
 
 const LINKS = [
   { href: "/dashboard", label: "현황판", admin: true },
-  { href: "/scan", label: "QR 출석체크", admin: false },
+  { href: "/qr", label: "이번 주 출석QR", admin: false },
+  { href: "/scan", label: "수기 출석", admin: false },
   { href: "/trainings", label: "교육·차수", admin: true },
-  { href: "/employees", label: "직원·QR", admin: true },
+  { href: "/employees", label: "직원관리", admin: true },
   { href: "/admins", label: "계정관리", admin: true },
   { href: "/logs", label: "접근기록", admin: true },
+  { href: "/settings", label: "설정", admin: true },
 ];
 
 export default function Shell({ user, children }: { user: U; children: React.ReactNode }) {
@@ -21,11 +27,11 @@ export default function Shell({ user, children }: { user: U; children: React.Rea
     location.href = "/login";
   };
   return (
-    <>
+    <UserCtx.Provider value={user}>
       <header className="topbar">
         <div className="topbar-inner">
-          <Link href={user.role === "admin" ? "/dashboard" : "/scan"} className="brand">
-            <span className="brand-mark">✓</span> 안전교육 출석관리
+          <Link href={user.role === "admin" ? "/dashboard" : "/qr"} className="brand">
+            <Logo /> <span className="app-title">안전교육 출석관리</span>
           </Link>
           <nav className="nav">
             {LINKS.filter((l) => user.role === "admin" || !l.admin).map((l) => (
@@ -45,6 +51,6 @@ export default function Shell({ user, children }: { user: U; children: React.Rea
       </header>
       <main className="container">{children}</main>
       <Toaster />
-    </>
+    </UserCtx.Provider>
   );
 }
