@@ -1,0 +1,29 @@
+{
+  "name": "safety-edu-attendance",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "exceljs": "^4.4.0",
+    "html5-qrcode": "^2.3.8",
+    "jose": "^6.2.16",
+    "next": "^16.4.5",
+    "postgres": "^4.1.0",
+    "qrcode": "^1.5.4",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,229 @@
+"use client";
+import { useCallback, useEffect, useState } from "react";
+import QRCode from "qrcode";
+import { api, DIMS, download, qrUrl } from "@/lib/client";
+import { Modal, Pager, toast } from "@/components/ui";
+
+type Emp = { id: number; emp_no: string; name: string; shift_type: string; department: string; work_group: string; position: string; qr_token: string; active: boolean };
+type Meta = Record<string, string[]>;
+const EMPTY = { emp_no: "", name: "", shift_type: "주전", department: "", work_group: "", position: "", active: true };
+
+export default function EmployeesPage() {
+  const [meta, setMeta] = useState<Meta>({});
+  const [f, setF] = useState<Record<string, string>>({ q: "", shift_type: "", department: "", work_group: "", position: "", active: "1" });
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState<{ rows: Emp[]; total: number; size: number } | null>(null);
+  const [sel, setSel] = useState<Set<number>>(new Set());
+  const [edit, setEdit] = useState<Partial<Emp> | null>(null);
+  const [qr, setQr] = useState<Emp | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  const params = useCallback(() => {
+    const p = new URLSearchParams();
+    Object.entries(f).forEach(([k, v]) => v && p.set(k, v));
+    return p;
+  }, [f]);
+
+  const load = useCallback(async () => {
+    const p = params();
+    p.set("page", String(page));
+    p.set("size", "50");
+    setData(await api(`/api/employees?${p}`));
+  }, [params, page]);
+  const loadMeta = () => api<Meta>("/api/meta").then(setMeta);
+
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadMeta(); }, []);
+
+  const bulk = async (action: string, label: string) => {
+    if (!sel.size) return alert("직원을 선택하세요.");
+    if (!confirm(`선택한 ${sel.size}명을 ${label}할까요?${action === "delete" ? "\n(참석 기록도 함께 삭제됩니다)" : ""}`)) return;
+    const r = await api<{ count: number }>("/api/employees/bulk", { body: { action, ids: [...sel] } });
+    toast(`${r.count}명 ${label} 완료`);
+    setSel(new Set());
+    load(); loadMeta();
+  };
+  const del = async (e: Emp) => {
+    if (!confirm(`${e.name}(${e.emp_no}) 을(를) 삭제할까요? 참석 기록도 함께 삭제됩니다.\n퇴사자는 '비활성' 처리를 권장합니다.`)) return;
+    await api(`/api/employees/${e.id}`, { method: "DELETE" });
+    toast("삭제되었습니다.");
+    load();
+  };
+  const printUrl = () => (sel.size ? `/employees/print?ids=${[...sel].join(",")}` : `/employees/print?${params()}`);
+  const allChecked = !!data?.rows.length && data.rows.every((r) => sel.has(r.id));
+
+  return (
+    <>
+      <div className="page-head">
+        <div><h1>직원·QR 관리</h1><div className="muted small">직원별 고유 QR코드는 개인정보가 포함되지 않은 무작위 코드로 자동 생성됩니다.</div></div>
+        <div className="row">
+          <button className="btn" onClick={() => download("/api/employees/template").catch((e) => alert(e.message))}>양식 다운로드</button>
+          <button className="btn" onClick={() => setImporting(true)}>⬆ 엑셀 업로드</button>
+          <a className="btn" href={printUrl()} target="_blank" rel="noreferrer">🖨 QR {sel.size ? `선택(${sel.size}) ` : "일괄 "}출력</a>
+          <button className="btn primary" onClick={() => setEdit({ ...EMPTY })}>+ 직원 등록</button>
+        </div>
+      </div>
+
+      <div className="card">
+        <form className="form-grid" onSubmit={(e) => { e.preventDefault(); setPage(1); load(); }}>
+          <label className="field">검색<input placeholder="사번/이름" value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} /></label>
+          {DIMS.map((d) => (
+            <label className="field" key={d.key}>{d.label}
+              <select value={f[d.key]} onChange={(e) => { setF({ ...f, [d.key]: e.target.value }); setPage(1); }}>
+                <option value="">전체</option>
+                {(meta[d.key] ?? []).map((v) => <option key={v}>{v}</option>)}
+              </select>
+            </label>
+          ))}
+          <label className="field">상태
+            <select value={f.active} onChange={(e) => { setF({ ...f, active: e.target.value }); setPage(1); }}>
+              <option value="">전체</option><option value="1">재직(활성)</option><option value="0">비활성</option>
+            </select>
+          </label>
+        </form>
+
+        <div className="row" style={{ margin: "14px 0 8px" }}>
+          <b>총 {data?.total.toLocaleString() ?? "-"}명</b>
+          <span className="spacer" />
+          {sel.size > 0 && <span className="small muted">{sel.size}명 선택</span>}
+          <button className="btn sm" onClick={() => bulk("deactivate", "비활성")}>비활성</button>
+          <button className="btn sm" onClick={() => bulk("activate", "활성")}>활성</button>
+          <button className="btn sm danger" onClick={() => bulk("delete", "삭제")}>삭제</button>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th><input type="checkbox" checked={allChecked} onChange={() => {
+                  const n = new Set(sel);
+                  data?.rows.forEach((r) => (allChecked ? n.delete(r.id) : n.add(r.id)));
+                  setSel(n);
+                }} /></th>
+                <th>사번</th><th>이름</th><th>교대/주전</th><th>부서</th><th>근무조</th><th>직책</th><th>상태</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {data?.rows.map((e) => (
+                <tr key={e.id} style={e.active ? undefined : { opacity: 0.55 }}>
+                  <td><input type="checkbox" checked={sel.has(e.id)} onChange={() => { const n = new Set(sel); n.has(e.id) ? n.delete(e.id) : n.add(e.id); setSel(n); }} /></td>
+                  <td className="mono">{e.emp_no}</td><td className="nowrap"><b>{e.name}</b></td>
+                  <td>{e.shift_type}</td><td>{e.department}</td><td>{e.work_group}</td><td>{e.position}</td>
+                  <td>{e.active ? <span className="badge ok">재직</span> : <span className="badge">비활성</span>}</td>
+                  <td className="right nowrap">
+                    <button className="btn sm" onClick={() => setQr(e)}>QR</button>{" "}
+                    <button className="btn sm" onClick={() => setEdit(e)}>수정</button>{" "}
+                    <button className="btn sm danger" onClick={() => del(e)}>삭제</button>
+                  </td>
+                </tr>
+              ))}
+              {data && !data.rows.length && <tr><td colSpan={9} className="empty">직원이 없습니다. [직원 등록] 또는 [엑셀 업로드]로 추가하세요.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        {data && <Pager page={page} total={data.total} size={data.size} onPage={setPage} />}
+      </div>
+
+      {edit && <EmpModal init={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); loadMeta(); }} />}
+      {qr && <QrModal emp={qr} onClose={() => setQr(null)} onReissued={(e) => { setQr(e); load(); }} />}
+      {importing && <ImportModal onClose={() => setImporting(false)} onDone={() => { load(); loadMeta(); }} />}
+    </>
+  );
+}
+
+function EmpModal({ init, onClose, onSaved }: { init: Partial<Emp>; onClose: () => void; onSaved: () => void }) {
+  const [e, setE] = useState<Partial<Emp>>(init);
+  const [err, setErr] = useState("");
+  const set = (k: keyof Emp) => (ev: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setE({ ...e, [k]: ev.target.value });
+  const save = async () => {
+    try {
+      if (e.id) await api(`/api/employees/${e.id}`, { method: "PATCH", body: e });
+      else await api("/api/employees", { body: e });
+      toast("저장되었습니다.");
+      onSaved();
+    } catch (ex) { setErr(ex instanceof Error ? ex.message : "실패"); }
+  };
+  return (
+    <Modal title={e.id ? "직원 정보 수정" : "직원 등록"} onClose={onClose}
+      footer={<><button className="btn" onClick={onClose}>취소</button><button className="btn primary" onClick={save}>저장</button></>}>
+      <div className="form-grid">
+        <label className="field">사번 *<input value={e.emp_no} onChange={set("emp_no")} /></label>
+        <label className="field">이름 *<input value={e.name} onChange={set("name")} /></label>
+        <label className="field">교대/주전
+          <select value={e.shift_type} onChange={set("shift_type")}><option>주전</option><option>교대</option><option value="">미지정</option></select>
+        </label>
+        <label className="field">부서<input value={e.department} onChange={set("department")} /></label>
+        <label className="field">근무조<input value={e.work_group} onChange={set("work_group")} placeholder="예) A조" /></label>
+        <label className="field">직책<input value={e.position} onChange={set("position")} /></label>
+        {e.id && (
+          <label className="field">상태
+            <select value={e.active ? "1" : "0"} onChange={(ev) => setE({ ...e, active: ev.target.value === "1" })}><option value="1">재직(활성)</option><option value="0">비활성(퇴사/휴직)</option></select>
+          </label>
+        )}
+      </div>
+      {err && <div className="alert err" style={{ marginTop: 10 }}>{err}</div>}
+    </Modal>
+  );
+}
+
+function QrModal({ emp, onClose, onReissued }: { emp: Emp; onClose: () => void; onReissued: (e: Emp) => void }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => { QRCode.toDataURL(qrUrl(emp.qr_token), { width: 480, margin: 2, errorCorrectionLevel: "M" }).then(setSrc); }, [emp.qr_token]);
+  const reissue = async () => {
+    if (!confirm("QR을 재발급하면 기존 QR코드는 즉시 사용할 수 없게 됩니다. 계속할까요?")) return;
+    onReissued(await api<Emp>(`/api/employees/${emp.id}/reissue`, { method: "POST" }));
+    toast("QR이 재발급되었습니다.");
+  };
+  return (
+    <Modal title="직원 QR코드" onClose={onClose}
+      footer={<>
+        <button className="btn danger" onClick={reissue}>QR 재발급(분실)</button>
+        <a className="btn primary" href={src} download={`QR_${emp.emp_no}_${emp.name}.png`}>PNG 저장</a>
+      </>}>
+      <div className="center">
+        {src && <img src={src} alt="QR" style={{ width: 260, height: 260 }} />}
+        <div style={{ fontSize: 20, fontWeight: 800 }}>{emp.name}</div>
+        <div className="muted">{emp.emp_no} · {emp.department} {emp.work_group}</div>
+        <p className="small muted">QR에는 무작위 식별코드만 담겨 있으며, 담당자 로그인 후에만 직원 정보가 표시됩니다.</p>
+      </div>
+    </Modal>
+  );
+}
+
+function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [deact, setDeact] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState<{ inserted: number; updated: number; deactivated: number; errors: string[]; errorCount: number } | null>(null);
+  const [err, setErr] = useState("");
+  const submit = async () => {
+    if (!file) return;
+    if (deact && !confirm("업로드 파일에 없는 기존 직원은 모두 '비활성' 처리됩니다. 계속할까요?")) return;
+    setBusy(true); setErr(""); setRes(null);
+    const fd = new FormData();
+    fd.set("file", file);
+    if (deact) fd.set("deactivateMissing", "1");
+    try { setRes(await api("/api/employees/import", { form: fd })); onDone(); }
+    catch (e) { setErr(e instanceof Error ? e.message : "실패"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Modal title="엑셀로 직원 일괄 등록" onClose={onClose}
+      footer={<><button className="btn" onClick={onClose}>닫기</button><button className="btn primary" disabled={!file || busy} onClick={submit}>{busy ? "업로드 중..." : "업로드"}</button></>}>
+      <div className="stack">
+        <div className="alert info small">
+          헤더: <b>사번, 이름, 교대/주전, 부서, 근무조, 직책</b> (사번·이름 필수, .xlsx)<br />
+          이미 등록된 사번은 정보가 갱신되고 기존 QR코드는 유지됩니다.
+        </div>
+        <input type="file" accept=".xlsx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        <label className="row small"><input type="checkbox" checked={deact} onChange={(e) => setDeact(e.target.checked)} /> 파일에 없는 기존 직원은 비활성(퇴사) 처리 — 전체 명단 갱신 시 사용</label>
+        {err && <div className="alert err">{err}</div>}
+        {res && (
+          <div className="alert ok">
+            신규 <b>{res.inserted}</b>명 · 갱신 <b>{res.updated}</b>명{res.deactivated ? <> · 비활성 <b>{res.deactivated}</b>명</> : null}
+            {res.errorCount > 0 && <div className="small" style={{ color: "var(--bad)", marginTop: 6 }}>오류/경고 {res.errorCount}건<br />{res.errors.slice(0, 10).map((e, i) => <div key={i}>{e}</div>)}</div>}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
