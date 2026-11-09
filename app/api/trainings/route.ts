@@ -24,7 +24,7 @@ export const GET = route("any", async ({ user }) => {
       files: files.filter((f) => f.training_id === t.id) };
     if (!staff) {
       const [c] = await sql`SELECT count(*)::int AS target_count,
-                              count(a.id)::int AS attended_count
+                              count(*) FILTER (WHERE a.id IS NOT NULL OR e.is_supervisor)::int AS attended_count
                             FROM employees e LEFT JOIN attendance a ON a.employee_id = e.id AND a.training_id = ${t.id}
                             WHERE ${targetCond(sql, target)}`;
       Object.assign(item, c);

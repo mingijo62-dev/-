@@ -33,6 +33,7 @@ export const POST = route(["admin"], async ({ req, user }) => {
     }
   }
   const list = [...map.values()];
+  const hasSup = raw.some((r) => "is_supervisor" in r.data);
   if (!list.length) throw new HttpError(400, "등록할 데이터가 없습니다. " + errors.slice(0, 5).join(" / "));
 
   const sql = await db();
@@ -41,12 +42,13 @@ export const POST = route(["admin"], async ({ req, user }) => {
   let deactivated = 0;
   await sql.begin(async (tx) => {
     for (let i = 0; i < list.length; i += 500) {
-      const chunk = list.slice(i, i + 500).map((e) => ({ ...e, qr_token: newQrToken(), active: true }));
+      const chunk = list.slice(i, i + 500).map((e) => ({ ...e, is_supervisor: !!e.is_supervisor, qr_token: newQrToken(), active: true }));
       const res = await tx<{ inserted: boolean }[]>`
-        INSERT INTO employees ${tx(chunk, "emp_no", "name", "shift_type", "department", "work_group", "position", "qr_token", "active")}
+        INSERT INTO employees ${tx(chunk, "emp_no", "name", "shift_type", "department", "work_group", "position", "is_supervisor", "qr_token", "active")}
         ON CONFLICT (emp_no) DO UPDATE SET
           name = EXCLUDED.name, shift_type = EXCLUDED.shift_type, department = EXCLUDED.department,
           work_group = EXCLUDED.work_group, position = EXCLUDED.position, active = true, updated_at = now()
+          ${hasSup ? tx`, is_supervisor = EXCLUDED.is_supervisor` : tx``}
         RETURNING (xmax = 0) AS inserted`;
       for (const r of res) r.inserted ? inserted++ : updated++;
     }
@@ -56,6 +58,7 @@ export const POST = route(["admin"], async ({ req, user }) => {
                               WHERE active AND emp_no NOT IN ${tx(nos)}`).count;
     }
   });
-  await audit(user, "엑셀업로드", `${file.name}: 신규 ${inserted}, 갱신 ${updated}, 비활성 ${deactivated}, 오류 ${errors.length}`);
-  return ok({ inserted, updated, deactivated, errors: errors.slice(0, 100), errorCount: errors.length });
+  const supervisors = list.filter((e) => e.is_supervisor).length;
+  await audit(user, "엑셀업로드", `${file.name}: 신규 ${inserted}, 갱신 ${updated}, 비활성 ${deactivated}, 관리감독자 ${hasSup ? supervisors : "열없음"}, 오류 ${errors.length}`);
+  return ok({ inserted, updated, deactivated, supervisors: hasSup ? supervisors : null, errors: errors.slice(0, 100), errorCount: errors.length });
 });

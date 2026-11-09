@@ -3,7 +3,7 @@ import { use, useEffect, useState } from "react";
 import Logo from "@/components/Logo";
 
 type Round = { id: number; round_no: number; start_time: string; end_time: string; location: string; title: string; training_id: number; fileCount: number };
-type Emp = { name: string; emp_no: string; shift_type: string; department: string; work_group: string; position: string };
+type Emp = { name: string; emp_no: string; shift_type: string; department: string; work_group: string; position: string; is_supervisor?: boolean };
 type Result = {
   status: "ok" | "duplicate"; title: string; round_no: number; checked_at: string;
   employee: Emp;
@@ -23,7 +23,7 @@ function EmpInfo({ e }: { e: Emp }) {
       <dt>구분</dt><dd>{e.shift_type || "-"}</dd>
       <dt>부서</dt><dd>{e.department || "-"}</dd>
       <dt>근무조</dt><dd>{e.work_group || "-"}</dd>
-      <dt>직책</dt><dd>{e.position || "-"}</dd>
+      <dt>직책</dt><dd>{e.position || "-"}{e.is_supervisor && <> <span className="badge brand">관리감독자</span></>}</dd>
     </dl>
   );
 }

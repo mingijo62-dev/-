@@ -8,6 +8,12 @@ export interface EmpInput {
   department: string;
   work_group: string;
   position: string;
+  is_supervisor?: boolean;
+}
+
+/** 'Y', 'O', '예', '1', '관리감독자' 등 → true */
+export function parseYes(v: unknown) {
+  return /^(y|yes|o|○|●|v|✓|예|네|1|true|관리감독자|해당)$/i.test(String(v ?? "").trim());
 }
 
 export function normalizeShift(v: unknown) {
@@ -25,6 +31,7 @@ export function parseEmp(b: Record<string, unknown>): EmpInput {
     department: str(b.department, 60),
     work_group: str(b.work_group, 30),
     position: str(b.position, 30),
+    ...(b.is_supervisor !== undefined && b.is_supervisor !== "" ? { is_supervisor: typeof b.is_supervisor === "boolean" ? b.is_supervisor : parseYes(b.is_supervisor) } : {}),
   };
   if (!e.emp_no) throw new HttpError(400, "사번은 필수입니다.");
   if (!e.name) throw new HttpError(400, "이름은 필수입니다.");
@@ -44,6 +51,7 @@ export function filterCond(sql: Sql, u: URLSearchParams) {
     const v = u.get(param);
     if (v) f = sql`${f} AND ${sql("e." + col)} = ${v}`;
   }
+  if (u.get("supervisor") === "1") f = sql`${f} AND e.is_supervisor`;
   const active = u.get("active");
   if (active === "1") f = sql`${f} AND e.active = true`;
   if (active === "0") f = sql`${f} AND e.active = false`;

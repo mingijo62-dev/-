@@ -77,7 +77,7 @@ export async function POST(req: Request) {
     if (b.step === "find") {
       return ok({
         status: "confirm",
-        employee: { name: emp.name, emp_no: emp.emp_no, shift_type: emp.shift_type, department: emp.department, work_group: emp.work_group, position: emp.position },
+        employee: { name: emp.name, emp_no: emp.emp_no, shift_type: emp.shift_type, department: emp.department, work_group: emp.work_group, position: emp.position, is_supervisor: emp.is_supervisor },
       });
     }
     const roundId = Number(b.roundId);
@@ -89,7 +89,8 @@ export async function POST(req: Request) {
       FROM rounds r JOIN trainings t ON t.id = r.training_id
       WHERE t.status = 'active' AND r.status = 'open' AND r.edu_date = (now() AT TIME ZONE 'Asia/Seoul')::date
       ORDER BY r.start_time, t.id`;
-    const mine = open.filter((r) => isTarget(emp, normalizeTarget(r.target)));
+    // 관리감독자는 대상 조건과 무관하게 항상 출석 가능
+    const mine = open.filter((r) => emp.is_supervisor || isTarget(emp, normalizeTarget(r.target)));
     let round;
     if (Number.isInteger(roundId) && roundId > 0) {
       round = open.find((r) => r.id === roundId);
@@ -116,7 +117,7 @@ export async function POST(req: Request) {
       VALUES (${round.training_id}, ${round.id}, ${emp.id}, 'self', ${dev}, ${ip})
       ON CONFLICT (training_id, employee_id) DO NOTHING RETURNING checked_at`;
     const files = await sql`SELECT id, filename, size FROM training_files WHERE training_id = ${round.training_id} ORDER BY id`;
-    const employee = { name: emp.name, emp_no: emp.emp_no, shift_type: emp.shift_type, department: emp.department, work_group: emp.work_group, position: emp.position };
+    const employee = { name: emp.name, emp_no: emp.emp_no, shift_type: emp.shift_type, department: emp.department, work_group: emp.work_group, position: emp.position, is_supervisor: emp.is_supervisor };
     if (!ins) {
       const [prev] = await sql`SELECT a.checked_at, r.round_no FROM attendance a JOIN rounds r ON r.id = a.round_id
                                WHERE a.training_id = ${round.training_id} AND a.employee_id = ${emp.id}`;

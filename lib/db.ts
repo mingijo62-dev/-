@@ -115,6 +115,9 @@ CREATE TABLE IF NOT EXISTS training_files (
 CREATE INDEX IF NOT EXISTS idx_files_training ON training_files(training_id);
 
 -- v2: 사이트 설정 (로고, 회사명, 주간 QR 버전)
+-- v2.2: 관리감독자 (법정 교육 이수 면제 → 항상 출석 인정)
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS is_supervisor BOOLEAN NOT NULL DEFAULT false;
+
 CREATE TABLE IF NOT EXISTS settings (
   key        TEXT PRIMARY KEY,
   value      TEXT NOT NULL,

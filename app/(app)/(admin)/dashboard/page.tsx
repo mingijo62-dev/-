@@ -8,13 +8,13 @@ import type { TrainingItem } from "@/components/TrainingPicker";
 type Item = { key: string; total: number; attended: number };
 type Stats = {
   training: { id: number; title: string; status: string; target: Record<string, string[]> };
-  total: number; attended: number; absent: number; rate: number;
+  total: number; attended: number; absent: number; rate: number; exempt: number;
   breakdown: Record<string, Item[]>;
   rounds: { id: number; round_no: number; edu_date: string; start_time: string; end_time: string; location: string; status: string; attended: number }[];
   recent: { emp_no: string; name: string; department: string; checked_at: string; method: string; round_no: number }[];
   at: string;
 };
-type Row = { id: number; emp_no: string; name: string; shift_type: string; department: string; work_group: string; position: string; checked_at: string | null; method: string | null; round_no: number | null; checked_by_name: string | null };
+type Row = { id: number; emp_no: string; name: string; shift_type: string; department: string; work_group: string; position: string; is_supervisor: boolean; checked_at: string | null; method: string | null; round_no: number | null; checked_by_name: string | null };
 
 export default function Dashboard() {
   const [trainings, setTrainings] = useState<TrainingItem[] | null>(null);
@@ -24,7 +24,7 @@ export default function Dashboard() {
   const [err, setErr] = useState("");
 
   // list state
-  const [status, setStatus] = useState<"" | "attended" | "absent">("");
+  const [status, setStatus] = useState<"" | "attended" | "absent" | "supervisor">("");
   const [filter, setFilter] = useState<{ dim: string; val: string; label: string } | null>(null);
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -133,7 +133,7 @@ export default function Dashboard() {
         <>
           <div className="grid grid-4">
             <div className="card kpi kpi-brand"><div className="label">교육 대상자</div><div className="value">{s.total.toLocaleString()}<small>명</small></div></div>
-            <div className="card kpi ok"><div className="label">참석</div><div className="value">{s.attended.toLocaleString()}<small>명</small></div></div>
+            <div className="card kpi ok"><div className="label">참석</div><div className="value">{s.attended.toLocaleString()}<small>명</small></div>{s.exempt > 0 && <div className="small muted">관리감독자 출석인정 {s.exempt}명 포함</div>}</div>
             <div className="card kpi bad"><div className="label">미참석</div><div className="value">{s.absent.toLocaleString()}<small>명</small></div></div>
             <div className="card kpi"><div className="label">참석률</div><div className="value">{s.rate}<small>%</small></div><Bar value={s.rate} lg /></div>
           </div>
@@ -205,7 +205,7 @@ export default function Dashboard() {
           </form>
         </div>
         <div className="tabs" style={{ marginTop: 8 }}>
-          {([["", "전체"], ["attended", "참석"], ["absent", "미참석"]] as const).map(([k, l]) => (
+          {([["", "전체"], ["attended", "참석"], ["absent", "미참석"], ["supervisor", "관리감독자"]] as const).map(([k, l]) => (
             <button key={k} className={status === k ? "active" : ""} onClick={() => { setStatus(k); setPage(1); }}>{l}</button>
           ))}
         </div>
@@ -222,9 +222,9 @@ export default function Dashboard() {
               {list?.rows.map((r) => (
                 <tr key={r.id}>
                   <td className="mono">{r.emp_no}</td>
-                  <td className="nowrap"><b>{r.name}</b></td>
+                  <td className="nowrap"><b>{r.name}</b>{r.is_supervisor && <> <span className="badge brand">관리감독자</span></>}</td>
                   <td>{r.shift_type}</td><td>{r.department}</td><td>{r.work_group}</td><td>{r.position}</td>
-                  <td>{r.checked_at ? <span className="badge ok">{r.round_no}차 참석</span> : <span className="badge bad">미참석</span>}</td>
+                  <td>{r.checked_at ? <span className="badge ok">{r.round_no}차 참석</span> : r.is_supervisor ? <span className="badge ok">출석인정</span> : <span className="badge bad">미참석</span>}</td>
                   <td className="small nowrap mono">{r.checked_at ? <>{fmtTime(r.checked_at)} <span className="muted">{r.method === "manual" ? "수기" : r.method === "self" ? "QR자가" : "QR"}{r.checked_by_name ? `·${r.checked_by_name}` : ""}</span></> : ""}</td>
                   <td className="right">
                     {r.checked_at ? <button className="btn sm danger" onClick={() => cancel(r)}>취소</button>

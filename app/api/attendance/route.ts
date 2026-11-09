@@ -18,7 +18,7 @@ export const POST = route("any", async ({ req, user }) => {
   const [emp] = await sql`SELECT * FROM employees WHERE id = ${int(b.employeeId)}`;
   if (!emp) throw new HttpError(404, "직원 정보를 찾을 수 없습니다.");
   if (!emp.active) throw new HttpError(400, `${emp.name}(${emp.emp_no}) 님은 비활성(퇴사/휴직) 상태입니다.`);
-  if (!isTarget(emp, training.target)) throw new HttpError(400, `${emp.name}(${emp.emp_no}) 님은 이 교육의 대상자가 아닙니다.`);
+  if (!emp.is_supervisor && !isTarget(emp, training.target)) throw new HttpError(400, `${emp.name}(${emp.emp_no}) 님은 이 교육의 대상자가 아닙니다.`);
 
   const method = "manual";
   const [ins] = await sql`

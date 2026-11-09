@@ -20,7 +20,7 @@ export const POST = route(["admin"], async ({ req, user }) => {
   const sql = await db();
   const [dup] = await sql`SELECT 1 FROM employees WHERE emp_no = ${e.emp_no}`;
   if (dup) throw new HttpError(409, `사번 ${e.emp_no} 은(는) 이미 등록되어 있습니다.`);
-  const [row] = await sql`INSERT INTO employees ${sql({ ...e, qr_token: newQrToken() })} RETURNING *`;
+  const [row] = await sql`INSERT INTO employees ${sql({ ...e, is_supervisor: !!e.is_supervisor, qr_token: newQrToken() })} RETURNING *`;
   await audit(user, "직원등록", `${e.emp_no}`);
   return ok(row);
 });

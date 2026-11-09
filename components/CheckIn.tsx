@@ -4,7 +4,7 @@ import { api, fmtTime } from "@/lib/client";
 
 export type ScanEmp = {
   id: number; emp_no: string; name: string; shift_type: string; department: string; work_group: string; position: string;
-  active: boolean; is_target: boolean;
+  active: boolean; is_target: boolean; is_supervisor?: boolean;
   attendance: null | { checked_at: string; round_no: number; method: string; checked_by_name: string | null };
 };
 
@@ -70,6 +70,7 @@ export function EmployeeCheckCard({
       <div className="row" style={{ alignItems: "baseline" }}>
         <span className="emp-name">{emp.name}</span>
         <span className="muted mono">{emp.emp_no}</span>
+        {emp.is_supervisor && <span className="badge brand">관리감독자</span>}
       </div>
       <dl className="emp-meta">
         <dt>교대/주전</dt><dd>{emp.shift_type || "-"}</dd>

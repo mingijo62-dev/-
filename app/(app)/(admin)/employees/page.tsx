@@ -3,13 +3,13 @@ import { useCallback, useEffect, useState } from "react";
 import { api, DIMS, download } from "@/lib/client";
 import { Modal, Pager, toast } from "@/components/ui";
 
-type Emp = { id: number; emp_no: string; name: string; shift_type: string; department: string; work_group: string; position: string; active: boolean };
+type Emp = { id: number; emp_no: string; name: string; shift_type: string; department: string; work_group: string; position: string; active: boolean; is_supervisor: boolean };
 type Meta = Record<string, string[]>;
-const EMPTY = { emp_no: "", name: "", shift_type: "주전", department: "", work_group: "", position: "", active: true };
+const EMPTY = { emp_no: "", name: "", shift_type: "주전", department: "", work_group: "", position: "", active: true, is_supervisor: false };
 
 export default function EmployeesPage() {
   const [meta, setMeta] = useState<Meta>({});
-  const [f, setF] = useState<Record<string, string>>({ q: "", shift_type: "", department: "", work_group: "", position: "", active: "1" });
+  const [f, setF] = useState<Record<string, string>>({ q: "", shift_type: "", department: "", work_group: "", position: "", active: "1", supervisor: "" });
   const [page, setPage] = useState(1);
   const [data, setData] = useState<{ rows: Emp[]; total: number; size: number } | null>(null);
   const [sel, setSel] = useState<Set<number>>(new Set());
@@ -76,6 +76,11 @@ export default function EmployeesPage() {
               <option value="">전체</option><option value="1">재직(활성)</option><option value="0">비활성</option>
             </select>
           </label>
+          <label className="field">관리감독자
+            <select value={f.supervisor} onChange={(e) => { setF({ ...f, supervisor: e.target.value }); setPage(1); }}>
+              <option value="">전체</option><option value="1">관리감독자만</option>
+            </select>
+          </label>
         </form>
 
         <div className="row" style={{ margin: "14px 0 8px" }}>
@@ -95,7 +100,7 @@ export default function EmployeesPage() {
                   data?.rows.forEach((r) => (allChecked ? n.delete(r.id) : n.add(r.id)));
                   setSel(n);
                 }} /></th>
-                <th>사번</th><th>이름</th><th>교대/주전</th><th>부서</th><th>근무조</th><th>직책</th><th>상태</th><th></th>
+                <th>사번</th><th>이름</th><th>구분</th><th>부서</th><th>근무조</th><th>직책</th><th>관리감독자</th><th>상태</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -104,6 +109,7 @@ export default function EmployeesPage() {
                   <td><input type="checkbox" checked={sel.has(e.id)} onChange={() => { const n = new Set(sel); n.has(e.id) ? n.delete(e.id) : n.add(e.id); setSel(n); }} /></td>
                   <td className="mono">{e.emp_no}</td><td className="nowrap"><b>{e.name}</b></td>
                   <td>{e.shift_type}</td><td>{e.department}</td><td>{e.work_group}</td><td>{e.position}</td>
+                  <td>{e.is_supervisor && <span className="badge brand">관리감독자</span>}</td>
                   <td>{e.active ? <span className="badge ok">재직</span> : <span className="badge">비활성</span>}</td>
                   <td className="right nowrap">
                     <button className="btn sm" onClick={() => setEdit(e)}>수정</button>{" "}
@@ -111,7 +117,7 @@ export default function EmployeesPage() {
                   </td>
                 </tr>
               ))}
-              {data && !data.rows.length && <tr><td colSpan={9} className="empty">직원이 없습니다. [직원 등록] 또는 [엑셀 업로드]로 추가하세요.</td></tr>}
+              {data && !data.rows.length && <tr><td colSpan={10} className="empty">직원이 없습니다. [직원 등록] 또는 [엑셀 업로드]로 추가하세요.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -142,12 +148,17 @@ function EmpModal({ init, onClose, onSaved }: { init: Partial<Emp>; onClose: () 
       <div className="form-grid">
         <label className="field">사번 *<input value={e.emp_no} onChange={set("emp_no")} /></label>
         <label className="field">이름 *<input value={e.name} onChange={set("name")} /></label>
-        <label className="field">교대/주전
+        <label className="field">구분 (교대/주전)
           <select value={e.shift_type} onChange={set("shift_type")}><option>주전</option><option>교대</option><option value="">미지정</option></select>
         </label>
         <label className="field">부서<input value={e.department} onChange={set("department")} /></label>
         <label className="field">근무조<input value={e.work_group} onChange={set("work_group")} placeholder="예) A조" /></label>
         <label className="field">직책<input value={e.position} onChange={set("position")} /></label>
+        <label className="field">관리감독자
+          <select value={e.is_supervisor ? "1" : "0"} onChange={(ev) => setE({ ...e, is_supervisor: ev.target.value === "1" })}>
+            <option value="0">아니오 (일반 직원)</option><option value="1">예 — 모든 교육 출석 인정</option>
+          </select>
+        </label>
         {e.id && (
           <label className="field">상태
             <select value={e.active ? "1" : "0"} onChange={(ev) => setE({ ...e, active: ev.target.value === "1" })}><option value="1">재직(활성)</option><option value="0">비활성(퇴사/휴직)</option></select>
@@ -163,7 +174,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
   const [file, setFile] = useState<File | null>(null);
   const [deact, setDeact] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [res, setRes] = useState<{ inserted: number; updated: number; deactivated: number; errors: string[]; errorCount: number } | null>(null);
+  const [res, setRes] = useState<{ inserted: number; updated: number; deactivated: number; supervisors: number | null; errors: string[]; errorCount: number } | null>(null);
   const [err, setErr] = useState("");
   const submit = async () => {
     if (!file) return;
@@ -181,7 +192,8 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
       footer={<><button className="btn" onClick={onClose}>닫기</button><button className="btn primary" disabled={!file || busy} onClick={submit}>{busy ? "업로드 중..." : "업로드"}</button></>}>
       <div className="stack">
         <div className="alert info small">
-          헤더: <b>사번, 구분, 성명, 부서, 근무조, 직책</b> (사번·성명 필수, 열 순서 무관, .xlsx)<br />
+          헤더: <b>사번, 구분, 성명, 부서, 근무조, 직책, 관리감독자</b> (사번·성명 필수, 열 순서 무관, .xlsx)<br />
+          관리감독자 열에 <b>Y</b>를 넣으면 모든 교육에서 자동 출석 인정됩니다. (열이 없으면 기존 설정 유지)<br />
           ※ 직원은 출석할 때 <b>사번·성명</b>을 입력하므로 사번이 반드시 있어야 합니다.<br />
           이미 등록된 사번은 정보가 갱신됩니다.
         </div>
@@ -191,6 +203,7 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
         {res && (
           <div className="alert ok">
             신규 <b>{res.inserted}</b>명 · 갱신 <b>{res.updated}</b>명{res.deactivated ? <> · 비활성 <b>{res.deactivated}</b>명</> : null}
+            {res.supervisors !== null && <> · 관리감독자 <b>{res.supervisors}</b>명</>}
             {res.errorCount > 0 && <div className="small" style={{ color: "var(--bad)", marginTop: 6 }}>오류/경고 {res.errorCount}건<br />{res.errors.slice(0, 10).map((e, i) => <div key={i}>{e}</div>)}</div>}
           </div>
         )}

@@ -34,7 +34,8 @@ export const GET = route("any", async ({ req }) => {
     work_group: e.work_group,
     position: e.position,
     active: e.active,
-    is_target: training ? isTarget(e, training.target) : true,
+    is_supervisor: e.is_supervisor,
+    is_target: training ? e.is_supervisor || isTarget(e, training.target) : true,
     attendance: att.find((a) => a.employee_id === e.id) ?? null,
   }));
   return ok(rows);
