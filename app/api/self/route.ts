@@ -43,10 +43,14 @@ export async function GET(req: Request) {
   }
 }
 
-/** 직원 자가 출석: 사번 + 이름 일치 확인 후 처리 */
+/**
+ * 직원 자가 출석 (2단계)
+ *  step=find  : 사번 + 이름 일치 확인 → 구분/부서/근무조/직책 반환 (본인 확인 화면)
+ *  step=check : 본인 확인 후 출석 처리 (사번·이름 재검증)
+ */
 export async function POST(req: Request) {
   try {
-    const b = await body<{ t?: string; roundId?: unknown; emp_no?: string; name?: string }>(req);
+    const b = await body<{ t?: string; step?: string; roundId?: unknown; emp_no?: string; name?: string }>(req);
     const sql = await db();
     if (!(await verifyWeeklyToken(sql, String(b.t ?? "")))) throw new HttpError(410, "만료된 QR코드입니다. 이번 주 QR코드를 다시 스캔하세요.");
     const dev = await deviceId(false);
@@ -57,18 +61,26 @@ export async function POST(req: Request) {
       WHERE ip = ${ip} AND action = '자가출석실패' AND created_at > now() - interval '10 minutes'`;
     if (n >= MAX_FAIL) throw new HttpError(429, "입력 오류가 많아 잠시 제한되었습니다. 10분 후 다시 시도하거나 교육 담당자에게 문의하세요.");
 
-    const empNo = str(b.emp_no, 30);
+    const empNo = str(b.emp_no, 30).replace(/\s/g, "");
     const name = str(b.name, 40).replace(/\s/g, "");
-    const roundId = Number(b.roundId);
     if (!empNo || !name) throw new HttpError(400, "사번과 이름을 입력하세요.");
-
-    const [emp] = await sql`SELECT * FROM employees WHERE emp_no = ${empNo} AND replace(name, ' ', '') = ${name}`;
     const fail = async (msg: string) => {
       await audit(null, "자가출석실패", `${empNo} / ${msg}`);
       return new HttpError(400, msg);
     };
+
+    // 사번 대소문자 무시, 이름 공백 무시
+    const [emp] = await sql`SELECT * FROM employees WHERE upper(emp_no) = upper(${empNo}) AND replace(name, ' ', '') = ${name}`;
     if (!emp) throw await fail("사번과 이름이 일치하는 직원이 없습니다. 다시 확인하세요.");
     if (!emp.active) throw await fail("재직(활성) 상태가 아닌 직원입니다. 교육 담당자에게 문의하세요.");
+
+    if (b.step === "find") {
+      return ok({
+        status: "confirm",
+        employee: { name: emp.name, emp_no: emp.emp_no, shift_type: emp.shift_type, department: emp.department, work_group: emp.work_group, position: emp.position },
+      });
+    }
+    const roundId = Number(b.roundId);
 
     // 오늘 접수중인 차수 중 본인이 대상인 것
     const open = await sql`
@@ -104,7 +116,7 @@ export async function POST(req: Request) {
       VALUES (${round.training_id}, ${round.id}, ${emp.id}, 'self', ${dev}, ${ip})
       ON CONFLICT (training_id, employee_id) DO NOTHING RETURNING checked_at`;
     const files = await sql`SELECT id, filename, size FROM training_files WHERE training_id = ${round.training_id} ORDER BY id`;
-    const employee = { name: emp.name, emp_no: emp.emp_no, department: emp.department };
+    const employee = { name: emp.name, emp_no: emp.emp_no, shift_type: emp.shift_type, department: emp.department, work_group: emp.work_group, position: emp.position };
     if (!ins) {
       const [prev] = await sql`SELECT a.checked_at, r.round_no FROM attendance a JOIN rounds r ON r.id = a.round_id
                                WHERE a.training_id = ${round.training_id} AND a.employee_id = ${emp.id}`;

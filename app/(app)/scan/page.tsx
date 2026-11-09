@@ -53,7 +53,7 @@ export default function ManualCheckPage() {
                 {list.map((c) => (
                   <button key={c.id} className="btn" style={{ justifyContent: "space-between" }} onClick={() => setEmp(c)}>
                     <span>{c.name} <span className="muted mono">{c.emp_no}</span></span>
-                    <span className="muted small">{c.department} {c.attendance ? "· 참석완료" : ""}</span>
+                    <span className="muted small">{[c.shift_type, c.department, c.work_group, c.position].filter(Boolean).join(" · ")} {c.attendance ? "· 참석완료" : ""}</span>
                   </button>
                 ))}
               </div>

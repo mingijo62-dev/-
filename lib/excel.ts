@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 
-export const EMP_HEADERS = ["사번", "이름", "교대/주전", "부서", "근무조", "직책"] as const;
+export const EMP_HEADERS = ["사번", "구분", "성명", "부서", "근무조", "직책"] as const;
 
 const ALIASES: Record<string, string[]> = {
   emp_no: ["사번", "사원번호", "직원번호", "empno", "emp_no"],
@@ -58,15 +58,15 @@ export async function templateWorkbook() {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("직원명단");
   ws.addRow([...EMP_HEADERS]);
-  ws.addRow(["A10001", "홍길동", "교대", "생산1팀", "A조", "사원"]);
-  ws.addRow(["A10002", "김안전", "주전", "안전환경팀", "", "팀장"]);
+  ws.addRow(["A10001", "교대", "홍길동", "생산2팀-PM23", "D반", "수습사원"]);
+  ws.addRow(["A10002", "주전", "김안전", "안전환경팀", "", "팀장"]);
   styleHeader(ws, EMP_HEADERS.length);
   ws.columns.forEach((c) => (c.width = 16));
   const help = wb.addWorksheet("작성안내");
   [
     ["작성 안내"],
-    ["1. '직원명단' 시트 1행의 헤더명을 변경하지 마세요. (사번, 이름 필수)"],
-    ["2. 교대/주전 열에는 '교대' 또는 '주전'을 입력하세요."],
+    ["1. '직원명단' 시트 1행의 헤더명을 변경하지 마세요. (사번, 성명 필수 — 직원이 출석할 때 사번·성명을 입력합니다)"],
+    ["2. 구분 열에는 '교대' 또는 '주전'을 입력하세요."],
     ["3. 사번이 이미 등록된 경우 정보가 갱신되며 기존 QR코드는 그대로 유지됩니다."],
     ["4. 예시 행(2~3행)은 삭제 후 업로드하세요."],
   ].forEach((r) => help.addRow(r));

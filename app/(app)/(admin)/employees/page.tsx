@@ -181,7 +181,8 @@ function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => v
       footer={<><button className="btn" onClick={onClose}>닫기</button><button className="btn primary" disabled={!file || busy} onClick={submit}>{busy ? "업로드 중..." : "업로드"}</button></>}>
       <div className="stack">
         <div className="alert info small">
-          헤더: <b>사번, 이름, 교대/주전, 부서, 근무조, 직책</b> (사번·이름 필수, .xlsx)<br />
+          헤더: <b>사번, 구분, 성명, 부서, 근무조, 직책</b> (사번·성명 필수, 열 순서 무관, .xlsx)<br />
+          ※ 직원은 출석할 때 <b>사번·성명</b>을 입력하므로 사번이 반드시 있어야 합니다.<br />
           이미 등록된 사번은 정보가 갱신됩니다.
         </div>
         <input type="file" accept=".xlsx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
