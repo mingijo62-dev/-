@@ -118,6 +118,10 @@ CREATE INDEX IF NOT EXISTS idx_files_training ON training_files(training_id);
 -- v2.2: 관리감독자 (법정 교육 이수 면제 → 항상 출석 인정)
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS is_supervisor BOOLEAN NOT NULL DEFAULT false;
 
+-- v2.5: 입력 실패 제한을 기기 단위로 (회사 와이파이 공용 IP 대응)
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS device TEXT;
+CREATE INDEX IF NOT EXISTS idx_audit_device ON audit_logs(device, action, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS settings (
   key        TEXT PRIMARY KEY,
   value      TEXT NOT NULL,
@@ -125,16 +129,33 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `;
 
-/** 스키마를 보장한 뒤 SQL 클라이언트를 반환 (프로세스당 1회 마이그레이션) */
+/** 스키마 버전: SCHEMA 를 바꾸면 반드시 올릴 것 */
+const SCHEMA_VERSION = "2.5";
+
+/** 스키마를 보장한 뒤 SQL 클라이언트를 반환 (프로세스당 1회, 버전이 같으면 조회 1번으로 끝) */
 export async function db(): Promise<Sql> {
   const sql = client();
   if (!g.__schema) {
-    g.__schema = sql
-      .begin(async (tx) => {
+    g.__schema = (async () => {
+      // 이미 최신이면 테이블 잠금이 필요한 ALTER 를 건너뜀 (동시 접속으로 서버가 여러 개 뜰 때 대기 방지)
+      try {
+        const [r] = await sql`SELECT value FROM settings WHERE key = 'schema_version'`;
+        if (r?.value === SCHEMA_VERSION) return;
+      } catch {
+        /* 최초 설치: settings 테이블 없음 */
+      }
+      await sql.begin(async (tx) => {
         await tx`SELECT pg_advisory_xact_lock(872001)`;
+        const [r] = await tx`SELECT to_regclass('settings') AS t`;
+        if (r.t) {
+          const [v] = await tx`SELECT value FROM settings WHERE key = 'schema_version'`;
+          if (v?.value === SCHEMA_VERSION) return; // 다른 서버가 먼저 끝냄
+        }
         await tx.unsafe(SCHEMA);
-      })
-      .then(() => undefined)
+        await tx`INSERT INTO settings (key, value) VALUES ('schema_version', ${SCHEMA_VERSION})
+                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`;
+      });
+    })()
       .catch((e) => {
         g.__schema = undefined;
         throw e;

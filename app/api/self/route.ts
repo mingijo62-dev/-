@@ -1,13 +1,14 @@
 import { randomBytes } from "crypto";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
-import { audit, body, clientIp, errorResponse, HttpError, ok, str } from "@/lib/api";
+import { body, clientIp, errorResponse, HttpError, ok, str } from "@/lib/api";
 import { isTarget, maskName, normalizeTarget } from "@/lib/common";
 import { verifyWeeklyToken } from "@/lib/weekly";
 
 export const dynamic = "force-dynamic";
 const DEV = "sea_dev";
-const MAX_FAIL = 10; // IP당 10분 내 실패 허용 횟수
+const MAX_FAIL_DEVICE = 10; // 휴대폰 1대당 10분 내 입력 실패 허용 횟수
+const MAX_FAIL_IP = 300; // 같은 IP(회사 와이파이 등 공용) 전체 10분 내 실패 한도 — 무차별 대입 방지용
 
 async function deviceId(create: boolean) {
   const jar = await cookies();
@@ -57,15 +58,19 @@ export async function POST(req: Request) {
     if (!dev) throw new HttpError(400, "QR코드를 다시 스캔한 뒤 시도하세요. (쿠키 차단 시 출석 불가)");
     const ip = await clientIp();
 
-    const [{ n }] = await sql<{ n: number }[]>`SELECT count(*)::int AS n FROM audit_logs
-      WHERE ip = ${ip} AND action = '자가출석실패' AND created_at > now() - interval '10 minutes'`;
-    if (n >= MAX_FAIL) throw new HttpError(429, "입력 오류가 많아 잠시 제한되었습니다. 10분 후 다시 시도하거나 교육 담당자에게 문의하세요.");
+    const [{ nd, ni }] = await sql<{ nd: number; ni: number }[]>`SELECT
+        count(*) FILTER (WHERE device = ${dev})::int AS nd,
+        count(*) FILTER (WHERE ip = ${ip})::int AS ni
+      FROM audit_logs WHERE action = '자가출석실패' AND created_at > now() - interval '10 minutes'
+        AND (device = ${dev} OR ip = ${ip})`;
+    if (nd >= MAX_FAIL_DEVICE || ni >= MAX_FAIL_IP) throw new HttpError(429, "입력 오류가 많아 잠시 제한되었습니다. 10분 후 다시 시도하거나 교육 담당자에게 문의하세요.");
 
     const empNo = str(b.emp_no, 30).replace(/\s/g, "");
     const name = str(b.name, 40).replace(/\s/g, "");
     if (!empNo || !name) throw new HttpError(400, "사번과 이름을 입력하세요.");
     const fail = async (msg: string) => {
-      await audit(null, "자가출석실패", `${empNo} / ${msg}`);
+      await sql`INSERT INTO audit_logs (username, action, detail, ip, device)
+                VALUES ('', '자가출석실패', ${`${empNo} / ${msg}`.slice(0, 1000)}, ${ip}, ${dev})`;
       return new HttpError(400, msg);
     };
 
