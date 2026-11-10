@@ -11,7 +11,7 @@ export const useUser = () => useContext(UserCtx);
 
 const LINKS = [
   { href: "/dashboard", label: "현황판", admin: true },
-  { href: "/qr", label: "이번 주 출석QR", admin: false },
+  { href: "/qr", label: "오늘의 출석QR", admin: false },
   { href: "/scan", label: "수기 출석", admin: false },
   { href: "/trainings", label: "교육·차수", admin: true },
   { href: "/employees", label: "직원관리", admin: true },

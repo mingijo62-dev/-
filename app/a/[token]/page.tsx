@@ -28,7 +28,7 @@ function EmpInfo({ e }: { e: Emp }) {
   );
 }
 
-/** 직원 자가 출석 화면 (주간 공용 QR 스캔 후 진입, 로그인 불필요) */
+/** 직원 자가 출석 화면 (오늘의 공용 출석 QR 스캔 후 진입, 로그인 불필요) */
 export default function SelfCheckIn({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
   const [rounds, setRounds] = useState<Round[] | null>(null);

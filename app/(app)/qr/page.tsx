@@ -16,7 +16,7 @@ const fmtDay = (d: string) => {
   return `${dt.getUTCMonth() + 1}/${dt.getUTCDate()}(${"일월화수목금토"[dt.getUTCDay()]})`;
 };
 
-/** 이번 주 공용 출석 QR — 교육장 입구 모니터/출력물로 게시 */
+/** 오늘의 공용 출석 QR — 매일 0시 자동 교체. 모니터 게시 또는 당일 시험지·유인물에 인쇄 */
 export default function WeeklyQrPage() {
   const [w, setW] = useState<W | null>(null);
   const [src, setSrc] = useState("");
@@ -34,7 +34,7 @@ export default function WeeklyQrPage() {
   }, [url]);
 
   const rotate = async () => {
-    if (!confirm("QR코드를 지금 즉시 교체할까요?\n이미 게시·출력한 이번 주 QR코드는 더 이상 사용할 수 없습니다. (QR 유출이 의심될 때 사용)")) return;
+    if (!confirm("QR코드를 지금 즉시 교체할까요?\n이미 게시·출력한 오늘 QR코드는 더 이상 사용할 수 없습니다. (QR 유출이 의심될 때 사용)")) return;
     await api("/api/weekly", { method: "POST" });
     toast("새 QR코드로 교체되었습니다.");
     load();
@@ -48,11 +48,12 @@ export default function WeeklyQrPage() {
     <>
       <div className="page-head no-print">
         <div>
-          <h1>이번 주 출석 QR</h1>
-          <div className="muted small">매주 월요일 0시에 자동으로 새 QR코드로 바뀝니다. 교육장 입구 화면에 띄우거나 출력해서 게시하세요.</div>
+          <h1>오늘의 출석 QR</h1>
+          <div className="muted small">매일 0시에 자동으로 새 QR코드로 바뀝니다 (오늘 하루만 사용 가능). 교육 당일에 출력해 시험지·유인물에 넣거나 화면에 띄우세요. [QR 이미지 저장]으로 받아 시험지 파일에 바로 넣을 수 있습니다.</div>
         </div>
         <div className="row">
           <button className="btn" onClick={copy} disabled={!w}>링크 복사</button>
+          {src && w && <a className="btn" href={src} download={`출석QR_${w.start}.png`}>QR 이미지 저장</a>}
           {role === "admin" && <button className="btn danger" onClick={rotate}>지금 즉시 교체</button>}
           <button className="btn primary" onClick={() => window.print()} disabled={!src}>🖨 게시용 출력</button>
         </div>
@@ -62,7 +63,7 @@ export default function WeeklyQrPage() {
         <div className="card qr-poster">
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}><Logo dark /></div>
           <h1 style={{ fontSize: 28 }}>안전교육 출석 체크</h1>
-          <div className="period">유효기간 {fmtDay(w.start)} ~ {fmtDay(w.end)}</div>
+          <div className="period">{fmtDay(w.start)} 하루만 유효</div>
           {src && <img src={src} alt="출석 QR코드" style={{ margin: "12px auto", display: "block" }} />}
           <div style={{ fontSize: 18, fontWeight: 700 }}>휴대폰 카메라로 QR을 찍고 <span style={{ color: "var(--brand)" }}>사번·이름</span>을 입력하세요</div>
           <div className="muted small" style={{ marginTop: 4 }}>본인 휴대폰으로만 출석할 수 있으며, 대리 출석은 자동으로 차단됩니다.</div>

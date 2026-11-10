@@ -34,7 +34,7 @@ export async function GET(req: Request) {
   try {
     const t = new URL(req.url).searchParams.get("t") || "";
     const sql = await db();
-    if (!(await verifyWeeklyToken(sql, t))) throw new HttpError(410, "만료되었거나 올바르지 않은 QR코드입니다. 교육장에 게시된 이번 주 QR코드를 다시 스캔하세요.");
+    if (!(await verifyWeeklyToken(sql, t))) throw new HttpError(410, "만료되었거나 올바르지 않은 QR코드입니다. 출석 QR은 매일 바뀝니다. 오늘 배부·게시된 QR코드를 다시 스캔하세요.");
     await deviceId(true);
     const rounds = await openRounds(sql);
     return ok({ rounds: rounds.map(({ files, ...r }) => ({ ...r, fileCount: (files as unknown[]).length })) });
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
   try {
     const b = await body<{ t?: string; step?: string; roundId?: unknown; emp_no?: string; name?: string }>(req);
     const sql = await db();
-    if (!(await verifyWeeklyToken(sql, String(b.t ?? "")))) throw new HttpError(410, "만료된 QR코드입니다. 이번 주 QR코드를 다시 스캔하세요.");
+    if (!(await verifyWeeklyToken(sql, String(b.t ?? "")))) throw new HttpError(410, "만료된 QR코드입니다. 출석 QR은 매일 바뀝니다. 오늘 QR코드를 다시 스캔하세요.");
     const dev = await deviceId(false);
     if (!dev) throw new HttpError(400, "QR코드를 다시 스캔한 뒤 시도하세요. (쿠키 차단 시 출석 불가)");
     const ip = await clientIp();

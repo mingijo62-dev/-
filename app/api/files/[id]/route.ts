@@ -3,7 +3,7 @@ import { audit, errorResponse, HttpError, int, ok, route } from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { verifyWeeklyToken } from "@/lib/weekly";
 
-/** 교육 자료 다운로드: 로그인 사용자, 또는 이번 주 QR 토큰(?t=) 보유자 */
+/** 교육 자료 다운로드: 로그인 사용자, 또는 오늘 출석 QR 토큰(?t=) 보유자 */
 export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const id = int((await ctx.params).id);

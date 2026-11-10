@@ -100,7 +100,7 @@ export default function TrainingsPage() {
   return (
     <>
       <div className="page-head">
-        <div><h1>교육·차수 관리</h1><div className="muted small">교육(예: 2026 하반기 정기안전교육)을 만들고 차수(일자/시간/장소)별로 출석을 접수합니다. 직원은 <b>교육 당일 · 접수중</b>인 차수에만 이번 주 QR로 출석할 수 있으며, 한 교육에 1회만 참석 처리됩니다.</div></div>
+        <div><h1>교육·차수 관리</h1><div className="muted small">교육(예: 2026 하반기 정기안전교육)을 만들고 차수(일자/시간/장소)별로 출석을 접수합니다. 직원은 <b>교육 당일 · 접수중</b>인 차수에만 오늘의 출석 QR로 출석할 수 있으며, 한 교육에 1회만 참석 처리됩니다.</div></div>
         <button className="btn primary" onClick={() => setEdit({ title: "", description: "", target: {}, rounds: [] })}>+ 새 교육</button>
       </div>
 

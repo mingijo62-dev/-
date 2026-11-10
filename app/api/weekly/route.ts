@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { audit, ok, route } from "@/lib/api";
 import { currentWeeklyToken, getSetting, setSetting } from "@/lib/weekly";
 
-/** 이번 주 공용 출석 QR 정보 + 오늘 접수중인 차수 */
+/** 오늘의 공용 출석 QR 정보 + 오늘 접수중인 차수 */
 export const GET = route("any", async () => {
   const sql = await db();
   const w = await currentWeeklyToken(sql);
@@ -20,6 +20,6 @@ export const POST = route(["admin"], async ({ user }) => {
   const sql = await db();
   const v = Number((await getSetting(sql, "qr_version")) ?? "1") + 1;
   await setSetting(sql, "qr_version", String(v));
-  await audit(user, "주간QR교체", `v${v}`);
+  await audit(user, "출석QR교체", `v${v}`);
   return ok(await currentWeeklyToken(sql));
 });

@@ -34,7 +34,7 @@ export default function ManualCheckPage() {
       <div className="page-head">
         <div>
           <h1>수기 출석</h1>
-          <div className="muted small">휴대폰 미소지 등으로 QR 출석이 어려운 직원을 사번/이름으로 찾아 담당자가 처리합니다. 일반 출석은 <Link href="/qr"><b>이번 주 출석QR</b></Link>을 이용하세요.</div>
+          <div className="muted small">휴대폰 미소지 등으로 QR 출석이 어려운 직원을 사번/이름으로 찾아 담당자가 처리합니다. 일반 출석은 <Link href="/qr"><b>오늘의 출석QR</b></Link>을 이용하세요.</div>
         </div>
       </div>
       <div className="card" style={{ marginBottom: 16 }}><TrainingPicker sel={sel} /></div>

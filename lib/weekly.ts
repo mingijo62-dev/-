@@ -1,15 +1,12 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import type { Sql } from "./db";
 
-/** KST 기준 이번 주(월~일) 정보 */
-export function weekInfo(now = new Date()) {
-  const kst = new Date(now.getTime() + 9 * 3600e3);
-  const dow = (kst.getUTCDay() + 6) % 7; // 월=0
-  const start = new Date(Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate() - dow));
-  const end = new Date(start.getTime() + 6 * 86400e3);
-  const f = (d: Date) => d.toISOString().slice(0, 10);
-  return { key: f(start), start: f(start), end: f(end) };
+/** KST 기준 오늘(하루) 정보 — 출석 QR은 매일 0시(KST)에 자동 교체 */
+export function dayInfo(now = new Date()) {
+  const day = new Date(now.getTime() + 9 * 3600e3).toISOString().slice(0, 10);
+  return { key: day, start: day, end: day };
 }
+const GRACE_MIN = 30; // 자정 직전 스캔 후 자정을 넘겨 제출하는 경우 허용(분)
 
 export async function getSetting(sql: Sql, key: string) {
   const [r] = await sql<{ value: string }[]>`SELECT value FROM settings WHERE key = ${key}`;
@@ -21,20 +18,26 @@ export async function setSetting(sql: Sql, key: string, value: string) {
             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`;
 }
 
-function sign(weekKey: string, version: string) {
+function sign(dayKey: string, version: string) {
   const secret = process.env.AUTH_SECRET || "";
-  return createHmac("sha256", secret).update(`weekly-qr:${weekKey}:v${version}`).digest("base64url").slice(0, 22);
+  return createHmac("sha256", secret).update(`daily-qr:${dayKey}:v${version}`).digest("base64url").slice(0, 22);
 }
 
-/** 이번 주 공용 QR 토큰 (매주 월요일 0시 KST 자동 교체, 관리자 수동 교체 시 version 증가) */
+/** 오늘의 공용 출석 QR 토큰 (매일 0시 KST 자동 교체, 관리자 수동 교체 시 version 증가) */
 export async function currentWeeklyToken(sql: Sql) {
-  const w = weekInfo();
+  const d = dayInfo();
   const version = (await getSetting(sql, "qr_version")) ?? "1";
-  return { token: sign(w.key, version), ...w, version };
+  return { token: sign(d.key, version), ...d, version };
 }
 
 export async function verifyWeeklyToken(sql: Sql, token: string) {
   if (!/^[A-Za-z0-9_-]{22}$/.test(token)) return false;
-  const { token: cur } = await currentWeeklyToken(sql);
-  return timingSafeEqual(Buffer.from(cur), Buffer.from(token));
+  const version = (await getSetting(sql, "qr_version")) ?? "1";
+  const now = new Date();
+  const keys = [dayInfo(now).key];
+  // 자정 직후 30분 동안은 전날 QR도 허용
+  const prev = dayInfo(new Date(now.getTime() - GRACE_MIN * 60e3)).key;
+  if (prev !== keys[0]) keys.push(prev);
+  const t = Buffer.from(token);
+  return keys.some((k) => timingSafeEqual(Buffer.from(sign(k, version)), t));
 }
